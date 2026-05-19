@@ -1,0 +1,40 @@
+name: Update Edge Data
+
+on:
+  schedule:
+    # Runs at 6:00 AM UTC every day (adjust as needed)
+    - cron: '0 6 * * *'
+  workflow_dispatch:   # allows manual trigger from GitHub
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install nba_api requests pandas python-dotenv
+
+      - name: Run data generation script
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: |
+          python edgeboard_full_edge_model.py
+
+      - name: Copy JSON to public folder
+        run: |
+          cp edgeboard_full_edge.json public/
+
+      - name: Commit and push updated JSON
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: auto-update edge data"
+          file_pattern: public/edgeboard_full_edge.json
