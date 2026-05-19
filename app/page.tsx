@@ -1,310 +1,234 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 
-interface Parlay {
-  type: string;
-  game: string;
-  game_time: string;
-  leg1: string;
-  leg1_signal: number;
-  leg1_grade: string;
-  leg2: string;
-  leg2_signal: number;
-  leg2_grade: string;
-  leg3: string;
-  leg3_signal: number;
-  leg3_grade: string;
-  combined_signal: number;
-  combined_grade: string;
-  confidence: string;
+// ------------------------------------------------------------------
+// Types
+// ------------------------------------------------------------------
+interface PlayerProp {
+  player: string;
+  stat_display: string;
+  projected_line: number;
+  expected_value: number;
+  true_probability: number;
+  recommendation: string;
 }
 
+interface TeamEdge {
+  game: string;
+  spread_line: string;
+  spread_ev: number;
+  total_line: number;
+  total_ev: number;
+}
+
+interface Parlay {
+  game: string;
+  type: string;
+  leg1: string;
+  leg1_ev: number;
+  leg2: string;
+  leg2_ev: number;
+  leg3: string;
+  leg3_ev: number;
+  combined_probability: number;
+  fair_decimal_odds: number;
+}
+
+// ------------------------------------------------------------------
+// Main Component
+// ------------------------------------------------------------------
 export default function Home() {
+  const searchParams = useSearchParams();
+  const secret = searchParams.get('access');
+  const [authenticated, setAuthenticated] = useState(false);
+  const [props, setProps] = useState<PlayerProp[]>([]);
+  const [edges, setEdges] = useState<TeamEdge[]>([]);
   const [parlays, setParlays] = useState<Parlay[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
-  const [minSignal, setMinSignal] = useState(0);
-  const [lastUpdated, setLastUpdated] = useState('');
-  const [games, setGames] = useState<{[key: string]: Parlay[]}>({});
 
+  // Check secret (replace with your own long random string)
   useEffect(() => {
-    fetchParlays();
-    // Refresh every 5 minutes (300,000 ms)
-    const interval = setInterval(fetchParlays, 300000);
-    return () => clearInterval(interval);
-  }, [filter, minSignal]);
-
-  const fetchParlays = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/parlays?type=${filter}&minSignal=${minSignal}&limit=500`);
-      const data = await response.json();
-      if (data.success) {
-        setParlays(data.parlays);
-        setLastUpdated(data.last_updated);
-        
-        // Group by game
-        const grouped = data.parlays.reduce((acc: any, parlay: Parlay) => {
-          const gameKey = `${parlay.game} (${parlay.game_time})`;
-          if (!acc[gameKey]) acc[gameKey] = [];
-          acc[gameKey].push(parlay);
-          return acc;
-        }, {});
-        setGames(grouped);
-      }
-    } catch (error) {
-      console.error('Error fetching parlays:', error);
+    if (secret === 'YOUR_SECRET_CODE') {
+      setAuthenticated(true);
     }
-    setLoading(false);
-  };
+  }, [secret]);
 
-  const getSignalColor = (signal: number) => {
-    if (signal >= 80) return 'text-green-400';
-    if (signal >= 70) return 'text-blue-400';
-    if (signal >= 60) return 'text-yellow-400';
-    return 'text-gray-400';
-  };
+  // Fetch data only if authenticated
+  useEffect(() => {
+    if (!authenticated) return;
+    fetch('/api/parlays')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setProps(data.playerProps || []);
+          setEdges(data.teamEdges || []);
+          setParlays(data.parlays || []);
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [authenticated]);
 
-  const getSignalBg = (signal: number) => {
-    if (signal >= 80) return 'bg-green-500/10 border-green-500/30';
-    if (signal >= 70) return 'bg-blue-500/10 border-blue-500/30';
-    if (signal >= 60) return 'bg-yellow-500/10 border-yellow-500/30';
-    return 'bg-gray-500/10 border-gray-500/30';
-  };
-
-  const getGradeBadge = (grade: string) => {
-    if (grade.includes('ELITE')) return 'bg-gradient-to-r from-green-600 to-emerald-600';
-    if (grade.includes('GREAT')) return 'bg-gradient-to-r from-blue-600 to-indigo-600';
-    return 'bg-gradient-to-r from-yellow-600 to-orange-600';
-  };
-
-  const stats = {
-    total: parlays.length,
-    elite: parlays.filter(p => p.combined_signal >= 80).length,
-    avgSignal: parlays.length > 0 ? (parlays.reduce((sum, p) => sum + p.combined_signal, 0) / parlays.length).toFixed(1) : '0',
-    games: Object.keys(games).length
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-900 to-black">
-      {/* Animated Background - 50 years of polish */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-pulse"></div>
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-green-600 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-pulse delay-1000"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-5 animate-pulse delay-2000"></div>
+  // Paywall
+  if (!authenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-black flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="text-6xl mb-4">🏀</div>
+          <h1 className="text-4xl font-bold text-white mb-2">EdgeBoard</h1>
+          <p className="text-gray-400 mb-6">Live +EV bets & parlays for Kalshi</p>
+          <a
+            href="https://your-gumroad-product-link.com"
+            className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition"
+          >
+            Subscribe on Gumroad – $29/mo
+          </a>
+          <p className="text-gray-500 text-sm mt-4">Already subscribed? Use your secret link.</p>
+        </div>
       </div>
+    );
+  }<a href="https://gum.co/edgeboard-tip" target="_blank" class="bg-yellow-600 text-white px-3 py-1 rounded text-sm">☕ Tip Jar</a>
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-white">Loading edge data...</div>
+      </div>
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // Render Dashboard
+  // ------------------------------------------------------------------
+  return (
+    <div className="min-h-screen bg-gray-950 text-white">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-gray-900/80 backdrop-blur-xl border-b border-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-green-500 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/25">
-                <span className="text-2xl">🏀</span>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-green-400 bg-clip-text text-transparent">
-                  EdgeBoard
-                </h1>
-                <p className="text-xs text-gray-500">Same-Game Parlay Intelligence • Real NBA Data • Free</p>
-              </div>
-            </div>
-            
-            <div className="flex gap-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-white">{stats.total}</div>
-                <div className="text-xs text-gray-500">Active Parlays</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-400">{stats.elite}</div>
-                <div className="text-xs text-gray-500">Elite Signals</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-400">{stats.avgSignal}%</div>
-                <div className="text-xs text-gray-500">Avg Signal</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-yellow-400">{stats.games}</div>
-                <div className="text-xs text-gray-500">Games Today</div>
-              </div>
-            </div>
+      <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🏀</span>
+            <span className="font-bold text-xl">EdgeBoard</span>
+            <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded-full ml-2">LIVE EDGE</span>
           </div>
+          <div className="text-sm text-gray-400">Updates every morning</div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Filters */}
-        <div className="bg-gray-800/50 backdrop-blur rounded-2xl p-4 mb-8 border border-gray-700">
-          <div className="flex flex-wrap gap-3 items-center">
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-4 py-2 rounded-xl font-medium transition-all ${
-                filter === 'all' 
-                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/25' 
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              All Parlays
-            </button>
-            <button
-              onClick={() => setFilter('3-Leg Same-Game')}
-              className={`px-4 py-2 rounded-xl font-medium transition-all ${
-                filter === '3-Leg Same-Game' 
-                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/25' 
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              🔗 Same-Game Parlays
-            </button>
-            
-            <div className="flex-1"></div>
-            
-            <select
-              value={minSignal}
-              onChange={(e) => setMinSignal(Number(e.target.value))}
-              className="px-4 py-2 bg-gray-900 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-blue-500"
-            >
-              <option value={0}>All Signals</option>
-              <option value={80}>Elite Only (80%+)</option>
-              <option value={70}>Great+ (70%+)</option>
-              <option value={60}>Good+ (60%+)</option>
-            </select>
-            
-            <button
-              onClick={fetchParlays}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl transition text-sm"
-            >
-              🔄 Refresh
-            </button>
+        {/* Stats summary */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+            <div className="text-gray-400 text-sm">+EV Player Props</div>
+            <div className="text-3xl font-bold text-green-400">{props.filter(p => p.expected_value > 3).length}</div>
+          </div>
+          <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+            <div className="text-gray-400 text-sm">Top Parlays</div>
+            <div className="text-3xl font-bold text-blue-400">{parlays.length}</div>
+          </div>
+          <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+            <div className="text-gray-400 text-sm">Highest EV</div>
+            <div className="text-3xl font-bold text-yellow-400">
+              {props.length ? Math.max(...props.map(p => p.expected_value)).toFixed(1) : 0}%
+            </div>
+          </div>
+          <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+            <div className="text-gray-400 text-sm">Best Parlay Odds</div>
+            <div className="text-3xl font-bold text-purple-400">
+              {parlays.length ? parlays[0].fair_decimal_odds.toFixed(2) : 0}x
+            </div>
           </div>
         </div>
 
-        {/* Last Updated */}
-        <div className="text-right text-xs text-gray-500 mb-4">
-          Live data from NBA.com • {lastUpdated ? `Updated: ${new Date(lastUpdated).toLocaleTimeString()}` : 'Loading...'}
-        </div>
-
-        {/* Parlays by Game */}
-        {loading ? (
-          <div className="space-y-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-gray-800/50 rounded-2xl p-6 border border-gray-700 animate-pulse">
-                <div className="h-6 bg-gray-700 rounded w-1/3 mb-4"></div>
-                <div className="space-y-3">
-                  <div className="h-16 bg-gray-700 rounded"></div>
-                  <div className="h-16 bg-gray-700 rounded"></div>
+        {/* Player Props Grid */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">📊 +EV Player Props</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {props.filter(p => p.expected_value > 3).slice(0, 12).map((prop, i) => (
+              <div key={i} className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-xl p-4 border border-gray-700 hover:border-green-500/50 transition">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="font-bold text-lg">{prop.player}</div>
+                    <div className="text-gray-300 text-sm">{prop.stat_display} Over {prop.projected_line}</div>
+                  </div>
+                  <div className={`px-2 py-1 rounded text-xs font-bold ${prop.recommendation === 'STRONG BUY' ? 'bg-green-600' : 'bg-blue-600'}`}>
+                    {prop.recommendation}
+                  </div>
+                </div>
+                <div className="mt-3 flex justify-between text-sm">
+                  <span className="text-green-400">EV: +{prop.expected_value}%</span>
+                  <span className="text-blue-400">True Prob: {prop.true_probability}%</span>
                 </div>
               </div>
             ))}
           </div>
-        ) : Object.keys(games).length === 0 ? (
-          <div className="text-center py-20">
-            <div className="text-6xl mb-4">🏀</div>
-            <p className="text-gray-400">No games today. Check back during the NBA season.</p>
-            <p className="text-gray-500 text-sm mt-2">Data refreshes daily at 6 AM</p>
+        </section>
+
+        {/* Team Edges Table */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold mb-4">🏀 Team Edges</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="border-b border-gray-800">
+                <tr>
+                  <th className="pb-2">Game</th>
+                  <th className="pb-2">Spread</th>
+                  <th className="pb-2">Spread EV</th>
+                  <th className="pb-2">Total</th>
+                  <th className="pb-2">Total EV</th>
+                </tr>
+              </thead>
+              <tbody>
+                {edges.map((edge, i) => (
+                  <tr key={i} className="border-b border-gray-800/50">
+                    <td className="py-3 font-medium">{edge.game}</td>
+                    <td>{edge.spread_line}</td>
+                    <td className={edge.spread_ev > 0 ? 'text-green-400' : 'text-red-400'}>{edge.spread_ev > 0 ? `+${edge.spread_ev}%` : `${edge.spread_ev}%`}</td>
+                    <td>Over {edge.total_line}</td>
+                    <td className={edge.total_ev > 0 ? 'text-green-400' : 'text-red-400'}>{edge.total_ev > 0 ? `+${edge.total_ev}%` : `${edge.total_ev}%`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ) : (
-          <div className="space-y-8">
-            {Object.entries(games).map(([gameName, gameParlays]) => (
-              <div key={gameName} className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-green-500 rounded-full"></div>
-                  <h2 className="text-xl font-bold text-white">{gameName}</h2>
-                  <span className="text-sm text-gray-500">{gameParlays.length} parlays</span>
+        </section>
+
+        {/* Parlays List */}
+        <section>
+          <h2 className="text-2xl font-bold mb-4">🎯 Top 3‑Leg Same‑Game Parlays</h2>
+          <div className="space-y-4">
+            {parlays.slice(0, 30).map((p, i) => (
+              <div key={i} className="bg-gray-900 rounded-xl p-5 border border-gray-800 hover:border-gray-700 transition">
+                <div className="flex flex-wrap justify-between items-start gap-3 mb-3">
+                  <div>
+                    <div className="font-bold text-xl">{p.game}</div>
+                    <div className="text-sm text-gray-400">{p.type}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-green-400 font-mono">Probability {p.combined_probability}%</div>
+                    <div className="text-blue-400 text-sm">Fair odds {p.fair_decimal_odds}x</div>
+                  </div>
                 </div>
-                
-                <div className="grid gap-4">
-                  {(gameParlays as Parlay[]).map((parlay, idx) => (
-                    <div 
-                      key={idx} 
-                      className={`group bg-gray-800/30 backdrop-blur rounded-xl border transition-all duration-300 hover:scale-[1.01] ${getSignalBg(parlay.combined_signal)}`}
-                    >
-                      <div className="p-5">
-                        {/* Header */}
-                        <div className="flex flex-wrap justify-between items-start gap-3 mb-4">
-                          <div className="flex gap-2">
-                            <span className={`px-3 py-1 rounded-lg text-xs font-bold text-white ${getGradeBadge(parlay.combined_grade)} shadow-lg`}>
-                              {parlay.combined_grade}
-                            </span>
-                            <span className="px-3 py-1 rounded-lg text-xs font-bold bg-gray-700 text-gray-300">
-                              {parlay.type}
-                            </span>
-                          </div>
-                          <div className="flex gap-3 items-center">
-                            <span className={`text-sm font-semibold ${parlay.confidence === 'HIGH' ? 'text-green-400' : 'text-yellow-400'}`}>
-                              {parlay.confidence} Confidence
-                            </span>
-                            <div className="text-right">
-                              <div className="text-xs text-gray-500">Combined Signal</div>
-                              <div className={`text-2xl font-bold ${getSignalColor(parlay.combined_signal)}`}>
-                                {parlay.combined_signal}%
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Legs */}
-                        <div className="space-y-2 mb-4">
-                          <div className="flex justify-between items-center p-3 bg-gray-900/50 rounded-xl">
-                            <span className="text-gray-300 font-medium">{parlay.leg1}</span>
-                            <span className={`text-sm font-bold ${getSignalColor(parlay.leg1_signal)}`}>
-                              {parlay.leg1_grade} ({parlay.leg1_signal}%)
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center p-3 bg-gray-900/50 rounded-xl">
-                            <span className="text-gray-300 font-medium">{parlay.leg2}</span>
-                            <span className={`text-sm font-bold ${getSignalColor(parlay.leg2_signal)}`}>
-                              {parlay.leg2_grade} ({parlay.leg2_signal}%)
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center p-3 bg-gray-900/50 rounded-xl">
-                            <span className="text-gray-300 font-medium">{parlay.leg3}</span>
-                            <span className={`text-sm font-bold ${getSignalColor(parlay.leg3_signal)}`}>
-                              {parlay.leg3_grade} ({parlay.leg3_signal}%)
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Footer */}
-                        <div className="pt-3 border-t border-gray-700 flex justify-between items-center">
-                          <div className="flex gap-2">
-                            <span className="text-xs text-gray-500">NBA.com API • Real-time</span>
-                          </div>
-                          <button 
-                            onClick={() => {
-                              const text = `${parlay.leg1}\n${parlay.leg2}\n${parlay.leg3}\n\n🎯 Combined Signal: ${parlay.combined_signal}%\n📊 ${parlay.game} - ${parlay.game_time}`;
-                              navigator.clipboard.writeText(text);
-                            }}
-                            className="text-sm px-3 py-1.5 rounded-xl bg-gray-700 hover:bg-gray-600 transition text-gray-300"
-                          >
-                            📋 Copy Parlay
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="grid gap-2 mt-2">
+                  <div className="flex justify-between items-center p-2 bg-gray-800/50 rounded">
+                    <span>{p.leg1}</span>
+                    <span className="text-green-400 text-sm">EV +{p.leg1_ev}%</span>
+                  </div>
+                  <div className="flex justify-between items-center p-2 bg-gray-800/50 rounded">
+                    <span>{p.leg2}</span>
+                    <span className="text-green-400 text-sm">EV +{p.leg2_ev}%</span>
+                  </div>
+                  <div className="flex justify-between items-center p-2 bg-gray-800/50 rounded">
+                    <span>{p.leg3}</span>
+                    <span className="text-green-400 text-sm">EV +{p.leg3_ev}%</span>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
-        )}
+        </section>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-gray-800 mt-12 py-8">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="text-gray-500 text-sm">
-            EdgeBoard Parlay Intelligence — Data from NBA.com API (free)
-          </p>
-          <p className="text-gray-600 text-xs mt-2">
-            Research only. No guaranteed outcomes. Bet responsibly. 21+.
-          </p>
-          <p className="text-gray-600 text-xs mt-2">
-            Updates every 5 minutes • Real NBA data • No subscriptions required
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }

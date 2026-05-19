@@ -2,31 +2,21 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
-interface Parlay {
-  combined_signal: number;
-  [key: string]: any;
-}
-
-const DATA_PATH = path.join(process.cwd(), 'public', 'edgeboard_final_product.json');
+const DATA_PATH = path.join(process.cwd(), 'public', 'edgeboard_full_edge.json');
 
 export async function GET() {
   try {
     const fileContents = fs.readFileSync(DATA_PATH, 'utf8');
     const data = JSON.parse(fileContents);
-    const parlays: Parlay[] = data.parlays || [];
-    const sortedParlays = parlays.sort((a: Parlay, b: Parlay) => b.combined_signal - a.combined_signal);
     return NextResponse.json({
       success: true,
-      total: sortedParlays.length,
-      parlays: sortedParlays,
-      last_updated: data.timestamp
+      playerProps: data.player_props,
+      teamEdges: data.team_edges,
+      parlays: data.parlays,
+      lastUpdated: data.timestamp
     });
   } catch (error) {
-    console.error('Error reading parlay data:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Parlay data not found.',
-      parlays: []
-    });
+    console.error('Error reading edge data:', error);
+    return NextResponse.json({ success: false, error: 'Run edgeboard_full_edge_model.py first' });
   }
 }
