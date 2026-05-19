@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
-const DATA_PATH = path.join(process.env.HOME, 'edgeboard_parlay_system/edgeboard_final_product.json');
+// Read from the `public` folder
+const DATA_PATH = path.join(process.cwd(), 'public', 'edgeboard_final_product.json');
 
 export async function GET() {
   try {
@@ -18,10 +19,10 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Error reading parlay data:', error);
-    return NextResponse.json({ 
-      success: false, 
-      error: 'Run the Python script first: python3.11 edgeboard_final_product.py',
-      parlays: [] 
+    return NextResponse.json({
+      success: false,
+      error: 'Parlay data not found. Make sure edgeboard_final_product.json exists in the public folder.',
+      parlays: []
     });
   }
 }
