@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
 import { stripe } from '@/lib/stripe';
 
 export async function POST(req: NextRequest) {
@@ -9,8 +9,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Replace with your actual Price ID from Stripe Dashboard
-  const priceId = 'price_1QwBLA1234567890';
+  // Replace with your actual Stripe Price ID
+  const priceId = 'price_1TYoljHYlbDFsJzEIrNIMRyb';
 
   try {
     const checkoutSession = await stripe.checkout.sessions.create({
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       payment_method_types: ['card'],
       customer_email: session.user.email,
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${process.env.NEXTAUTH_URL}/dashboard?payment=success`,
+      success_url: `${process.env.NEXTAUTH_URL}/?payment=success`,
       cancel_url: `${process.env.NEXTAUTH_URL}/pricing`,
       metadata: { userId: session.user.id },
     });

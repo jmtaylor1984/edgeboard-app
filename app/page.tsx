@@ -1,11 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 
-// ------------------------------------------------------------------
-// Types
-// ------------------------------------------------------------------
 interface PlayerProp {
   player: string;
   stat_display: string;
@@ -36,75 +34,69 @@ interface Parlay {
   fair_decimal_odds: number;
 }
 
-// ------------------------------------------------------------------
-// Main Component
-// ------------------------------------------------------------------
-export default function Home() {
-  const searchParams = useSearchParams();
-  const secret = searchParams.get('access');
-  const [authenticated, setAuthenticated] = useState(false);
+export default function HomePage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [subscribed, setSubscribed] = useState<boolean | null>(null);
   const [props, setProps] = useState<PlayerProp[]>([]);
   const [edges, setEdges] = useState<TeamEdge[]>([]);
   const [parlays, setParlays] = useState<Parlay[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(true);
 
-  // Check secret (replace with your own long random string)
+  // 1. Redirect unauthenticated users to login
   useEffect(() => {
-    if (secret === 'YOUR_SECRET_CODE') {
-      setAuthenticated(true);
+    if (status === 'unauthenticated') {
+      router.push('/login');
     }
-  }, [secret]);
+  }, [status, router]);
 
-  // Fetch data only if authenticated
+  // 2. Check subscription status
   useEffect(() => {
-    if (!authenticated) return;
-    fetch('/api/parlays')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setProps(data.playerProps || []);
-          setEdges(data.teamEdges || []);
-          setParlays(data.parlays || []);
-        }
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [authenticated]);
+    if (status === 'authenticated' && session?.user?.email) {
+      fetch('/api/check-subscription')
+        .then(res => res.json())
+        .then(data => {
+          if (data.subscribed) {
+            setSubscribed(true);
+          } else {
+            // Not subscribed → redirect to pricing page
+            router.push('/pricing');
+          }
+        })
+        .catch(() => router.push('/pricing'));
+    }
+  }, [status, session, router]);
 
-  // Paywall
-  if (!authenticated) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-black flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-6">
-          <div className="text-6xl mb-4">🏀</div>
-          <h1 className="text-4xl font-bold text-white mb-2">EdgeBoard</h1>
-          <p className="text-gray-400 mb-6">Live +EV bets & parlays for Kalshi</p>
-          <a
-            href="https://your-gumroad-product-link.com"
-            className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition"
-          >
-            Subscribe on Gumroad – $29/mo
-          </a>
-          <p className="text-gray-500 text-sm mt-4">Already subscribed? Use your secret link.</p>
-        </div>
-      </div>
-    );
-  }<a href="https://gum.co/edgeboard-tip" target="_blank" class="bg-yellow-600 text-white px-3 py-1 rounded text-sm">☕ Tip Jar</a>
+  // 3. Fetch dashboard data only when subscribed
+  useEffect(() => {
+    if (subscribed === true) {
+      fetch('/api/parlays')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setProps(data.playerProps || []);
+            setEdges(data.teamEdges || []);
+            setParlays(data.parlays || []);
+          }
+          setLoadingData(false);
+        })
+        .catch(() => setLoadingData(false));
+    }
+  }, [subscribed]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Loading edge data...</div>
-      </div>
-    );
+  if (status === 'loading' || subscribed === null || loadingData) {
+    return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Loading...</div>;
   }
 
+  // Should never reach here if not subscribed, but just in case:
+  if (!subscribed) return null;
+
   // ------------------------------------------------------------------
-  // Render Dashboard
+  // Render Dashboard (same as before, with a Tip button)
   // ------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      {/* Header */}
+      {/* Header with Tip button */}
       <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -112,7 +104,17 @@ export default function Home() {
             <span className="font-bold text-xl">EdgeBoard</span>
             <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded-full ml-2">LIVE EDGE</span>
           </div>
-          <div className="text-sm text-gray-400">Updates every morning</div>
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-400">Updates every morning</div>
+            <a
+              href="https://gum.co/edgeboard-tip"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-yellow-600 text-white px-3 py-1 rounded text-sm hover:bg-yellow-700 transition"
+            >
+              ☕ Tip Jar
+            </a>
+          </div>
         </div>
       </header>
 
